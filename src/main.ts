@@ -1,6 +1,5 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import createSuperAdmin from './script/create-super-admin';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
@@ -13,7 +12,6 @@ async function bootstrap() {
   .build()
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('/api', app, document);
-  await createSuperAdmin()
 
   app.enableCors()
   await app.listen(process.env.PORT ?? 3000);
