@@ -223,6 +223,7 @@ Bu yerda siz:
 🚀 Maqsadimiz: xizmatlarni tez, oson va ishonchli qilib ulash!
 
 ADMIN @ustabor_admin
+ALOQA UCHUN +998887910708 +998887910708
 DASTURCHI @azez_coder
 `
       )
