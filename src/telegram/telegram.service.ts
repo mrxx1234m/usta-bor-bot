@@ -53,7 +53,7 @@ Quyidagilardan birini tanlang:`,
       this.bot.action(`category_${category}`, async (ctx) => {
         const services = serviceList[category];
         await ctx.editMessageText(
-          `Tanlangan kategoriya: ${category}\nXizmatni tanlang:\n\n📞 Admin: @ustabor_admin`,
+          `Tanlangan kategoriya: ${category}\nXizmatni tanlang:\n\n📞 Admin: @ustabor_admin \n\n📞Tel: +998887910708`,
           Markup.inlineKeyboard([
             ...services.map((service) => [Markup.button.callback(service, `service_${service}`)]),
             [Markup.button.callback('◀️ Orqaga', 'user')],
@@ -223,7 +223,7 @@ Bu yerda siz:
 🚀 Maqsadimiz: xizmatlarni tez, oson va ishonchli qilib ulash!
 
 ADMIN @ustabor_admin
-ALOQA UCHUN +998887910708 +998887910708
+ALOQA UCHUN +998887910708 +998916677141
 DASTURCHI @azez_coder
 `
       )
