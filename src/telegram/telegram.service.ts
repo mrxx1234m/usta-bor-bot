@@ -6,7 +6,7 @@ import { Markup, Telegraf } from 'telegraf';
 export class TelegramService implements OnModuleInit {
   private bot: Telegraf;
   private ADMIN_CHANNEL_ID = process.env.ADMIN_CHANNEL_ID || '-1001234567890';
-  private userSelections = new Map<number, { category?: string; service?: string; phone?: string; name?: string; role?: string }>();
+  private userSelections = new Map<number, { category?: string; service?: string; phone?: string; name?: string; role?: string; state?: 'awaiting_name' | 'awaiting_service' | 'awaiting_phone' }>();
 
   constructor(private readonly services: ServicesService) {
     this.bot = new Telegraf(process.env.BOT_TOKEN || '');
@@ -15,7 +15,6 @@ export class TelegramService implements OnModuleInit {
   async onModuleInit() {
     const serviceList = await this.services.getAllServices();
 
-    /** START komandasi */
     const mainMenu = Markup.inlineKeyboard([
       [Markup.button.callback('🔧 Menga usta kerak', 'user')],
       [Markup.button.callback("🛠 Men xizmat ko‘rsatmoqchiman", 'master')],
@@ -36,7 +35,6 @@ Quyidagilardan birini tanlang:`,
       );
     });
 
-    /** Mijoz tugmasi bosilganda — kategoriyalar chiqadi */
     this.bot.action('user', async (ctx) => {
       const categories = Object.keys(serviceList);
       await ctx.editMessageText(
@@ -48,7 +46,6 @@ Quyidagilardan birini tanlang:`,
       );
     });
 
-    /** Har bir kategoriya uchun xizmatlar chiqishi */
     Object.keys(serviceList).forEach((category) => {
       this.bot.action(`category_${category}`, async (ctx) => {
         const services = serviceList[category];
@@ -62,64 +59,19 @@ Quyidagilardan birini tanlang:`,
       });
     });
 
-    /** Xizmat tanlanganda telefon raqamini so‘rash */
     Object.entries(serviceList).forEach(([category, services]) => {
       services.forEach((service) => {
         this.bot.action(`service_${service}`, async (ctx) => {
           const userId = ctx.from.id;
-          this.userSelections.set(userId, { category, service, role: 'client' });
+          this.userSelections.set(userId, { category, service, role: 'client', state: 'awaiting_phone' });
 
           await ctx.reply(
-            `✅ Siz "${service}" xizmatini tanladingiz.\n\n📱 Iltimos, telefon raqamingizni ulashing:`,
-            Markup.keyboard([
-                [Markup.button.contactRequest('📞 Telefon raqamni ulashish')],
-                [Markup.button.text('❌ Bekor qilish')],
-              ])
-              .oneTime()
-              .resize()
+            `✅ Siz "${service}" xizmatini tanladingiz.\n\n📱 Iltimos, telefon raqamingizni yozing (masalan: +998991234567):`
           );
         });
       });
     });
 
-    /** Telefon raqamini olish (mijoz uchun) */
-    this.bot.on('contact', async (ctx) => {
-      const userId = ctx.from.id;
-      const selection = this.userSelections.get(userId);
-      if (!selection) return;
-
-      selection.phone = ctx.message.contact.phone_number;
-
-      if (selection.role === 'client') {
-        await ctx.reply(
-          `✅ Ma’lumotlaringiz:\n\n` +
-            `📌 Kategoriya: ${selection.category}\n` +
-            `🔧 Xizmat: ${selection.service}\n` +
-            `📱 Telefon: ${selection.phone}\n\n` +
-            `Tasdiqlaysizmi?`,
-          Markup.inlineKeyboard([
-            [Markup.button.callback('✅ Ha, tasdiqlayman', 'confirm')],
-            [Markup.button.callback('❌ Bekor qilish', 'cancel')],
-          ])
-        );
-      }
-
-      if (selection.role === 'master') {
-        await ctx.reply(
-          `✅ Ma’lumotlaringiz:\n\n` +
-            `👤 Ism: ${selection.name}\n` +
-            `📌 Yo‘nalish: ${selection.service}\n` +
-            `📱 Telefon: ${selection.phone}\n\n` +
-            `Tasdiqlaysizmi?`,
-          Markup.inlineKeyboard([
-            [Markup.button.callback('✅ Ha, tasdiqlayman', 'confirm')],
-            [Markup.button.callback('❌ Bekor qilish', 'cancel')],
-          ])
-        );
-      }
-    });
-
-    /** Tasdiqlash tugmasi */
     this.bot.action('confirm', async (ctx) => {
       const userId = ctx.from.id;
       const selection = this.userSelections.get(userId);
@@ -162,51 +114,82 @@ ID: ${user.id}
       }
     });
 
-    /** Bekor qilish tugmasi */
     this.bot.action('cancel', async (ctx) => {
       const userId = ctx.from.id;
       this.userSelections.delete(userId);
       await ctx.reply('❌ Amal bekor qilindi.', mainMenu);
     });
 
-    /** Orqaga tugmasi */
     this.bot.action('back_main', async (ctx) => {
       await ctx.editMessageText('Asosiy menyu:', mainMenu);
     });
 
-    /** Usta bo‘lish tugmasi */
     this.bot.action('master', async (ctx) => {
       const userId = ctx.from.id;
-      this.userSelections.set(userId, { role: 'master' });
+      this.userSelections.set(userId, { role: 'master', state: 'awaiting_name' });
 
       await ctx.reply(`Ismingizni yuboring:`);
     });
 
-    /** Usta ismini va yo‘nalishini ketma-ket so‘rash */
     this.bot.on('text', async (ctx) => {
       const userId = ctx.from.id;
       const selection = this.userSelections.get(userId);
       if (!selection) return;
 
+      // Usta uchun ism → yo‘nalish → telefon
       if (selection.role === 'master') {
-        if (!selection.name) {
+        if (selection.state === 'awaiting_name') {
           selection.name = ctx.message.text;
+          selection.state = 'awaiting_service';
           await ctx.reply(`Yo‘nalishingizni kiriting (masalan: santexnik, elektrik):`);
           return;
         }
-        if (!selection.service) {
+
+        if (selection.state === 'awaiting_service') {
           selection.service = ctx.message.text;
-          await ctx.reply(
-            `📱 Endi telefon raqamingizni ulashing:`,
-            Markup.keyboard([Markup.button.contactRequest('📞 Telefon raqamni ulashish')])
-              .oneTime()
-              .resize()
-          );
+          selection.state = 'awaiting_phone';
+          await ctx.reply(`📱 Endi telefon raqamingizni yozing (masalan: +998991234567):`);
+          return;
         }
+
+        if (selection.state === 'awaiting_phone') {
+          selection.phone = ctx.message.text;
+          selection.state = undefined;
+
+          await ctx.reply(
+            `✅ Ma’lumotlaringiz:\n\n` +
+              `👤 Ism: ${selection.name}\n` +
+              `📌 Yo‘nalish: ${selection.service}\n` +
+              `📱 Telefon: ${selection.phone}\n\n` +
+              `Tasdiqlaysizmi?`,
+            Markup.inlineKeyboard([
+              [Markup.button.callback('✅ Ha, tasdiqlayman', 'confirm')],
+              [Markup.button.callback('❌ Bekor qilish', 'cancel')],
+            ])
+          );
+          return;
+        }
+      }
+
+      // Mijoz uchun telefon raqam qabul qilish
+      if (selection.role === 'client' && selection.state === 'awaiting_phone') {
+        selection.phone = ctx.message.text;
+        selection.state = undefined;
+
+        await ctx.reply(
+          `✅ Ma’lumotlaringiz:\n\n` +
+            `📌 Kategoriya: ${selection.category}\n` +
+            `🔧 Xizmat: ${selection.service}\n` +
+            `📱 Telefon: ${selection.phone}\n\n` +
+            `Tasdiqlaysizmi?`,
+          Markup.inlineKeyboard([
+            [Markup.button.callback('✅ Ha, tasdiqlayman', 'confirm')],
+            [Markup.button.callback('❌ Bekor qilish', 'cancel')],
+          ])
+        );
       }
     });
 
-    /** Bot haqida */
     this.bot.action('info', (ctx) =>
       ctx.reply(
         `ℹ️ "Ustabor" nima?
@@ -229,7 +212,6 @@ DASTURCHI @azez_coder
       )
     );
 
-    /** Botni ishga tushirish */
     await this.bot.launch();
     console.log('✅ Bot ishga tushdi');
   }
